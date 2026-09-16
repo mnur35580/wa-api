@@ -1,0 +1,6 @@
+node_modules/
+auth_sessions/
+uploads/
+wa-api-saas.zip
+firebase-service-account.json
+.env
