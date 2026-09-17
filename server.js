@@ -173,6 +173,23 @@ async function apiKeyMiddleware(req, res, next) {
     next();
 }
 
+// Middleware API Key (Lax) - Mengizinkan akses meskipun belum connect (untuk cek QR)
+async function apiKeyLaxMiddleware(req, res, next) {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey) return res.status(401).json({ error: 'Unauthorized: Header x-api-key tidak ditemukan!' });
+
+    const snapshot = await db.collection('devices').where('apiKey', '==', apiKey).get();
+    if (snapshot.empty) return res.status(401).json({ error: 'Unauthorized: API Key tidak valid!' });
+
+    const deviceId = snapshot.docs[0].id;
+    const session = sessions.get(deviceId);
+    
+    // Walaupun session null atau belum connect, tetap diloloskan
+    req.deviceId = deviceId;
+    req.sessionData = session; 
+    next();
+}
+
 // ================= MIDDLEWARE ADMIN AUTH (FIREBASE) =================
 async function adminAuthMiddleware(req, res, next) {
     const authHeader = req.headers.authorization;
@@ -266,6 +283,35 @@ app.get('/api/admin/history', adminAuthMiddleware, async (req, res) => {
 
 
 // ================= API KLIEN (MENGGUNAKAN API KEY) =================
+
+// Endpoint Cek Status & Ambil QR Code
+app.get('/api/status', apiKeyLaxMiddleware, async (req, res) => {
+    const session = req.sessionData;
+    if (!session) {
+        return res.json({ connected: false, qr: null, message: "Device sedang booting atau tidak ada di server." });
+    }
+    res.json({
+        connected: session.connected,
+        qr: session.connected ? null : session.qr,
+        label: session.label
+    });
+});
+
+// Endpoint Ambil Daftar Grup
+app.get('/api/groups', apiKeyMiddleware, async (req, res) => {
+    try {
+        const groups = await req.sock.groupFetchAllParticipating();
+        const groupList = Object.values(groups).map(g => ({
+            id: g.id,
+            name: g.subject,
+            participantsCount: g.participants.length
+        }));
+        res.json({ success: true, groups: groupList });
+    } catch (err) {
+        console.error('Error fetch groups:', err);
+        res.status(500).json({ error: 'Gagal mengambil data grup', details: err.message });
+    }
+});
 
 // Endpoint Kirim Teks
 app.post('/api/send', apiKeyMiddleware, async (req, res) => {
