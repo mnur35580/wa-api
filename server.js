@@ -90,6 +90,8 @@ async function startDevice(deviceId, label, apiKey) {
             } else {
                 console.log(`[${deviceId}] ❌ Device ter-logout.`);
                 if (fs.existsSync(authDir)) fs.rmSync(authDir, { recursive: true, force: true });
+                // Restart sesi dari 0 agar langsung mengeluarkan QR Code baru
+                setTimeout(() => startDevice(deviceId, label, apiKey), 3000); 
             }
         } else if (connection === 'open') {
             console.log(`[${deviceId}] ✅ Berhasil Terhubung ke WhatsApp!`);
@@ -310,6 +312,19 @@ app.get('/api/groups', apiKeyMiddleware, async (req, res) => {
     } catch (err) {
         console.error('Error fetch groups:', err);
         res.status(500).json({ error: 'Gagal mengambil data grup', details: err.message });
+    }
+});
+
+// Endpoint Logout Klien (Mereset Sesi WA)
+app.post('/api/logout', apiKeyMiddleware, async (req, res) => {
+    try {
+        if (req.sock) {
+            await req.sock.logout();
+        }
+        res.json({ success: true, message: "Berhasil logout dari WhatsApp. Sesi telah direset." });
+    } catch (error) {
+        console.error('Error logout:', error);
+        res.status(500).json({ error: 'Gagal logout', details: error.message });
     }
 });
 

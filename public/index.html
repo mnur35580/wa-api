@@ -139,10 +139,11 @@
                     <h5>Endpoint API Server Anda</h5>
                     <p>Gunakan endpoint ini di aplikasi Gudang Management Anda atau Klien Anda.</p>
                     <ul class="list-group mb-4">
-                        <li class="list-group-item"><strong>Cek Status / Minta QR:</strong> <code>GET http://[IP_VPS_ATAU_DOMAIN_ANDA]:3000/api/status</code></li>
-                        <li class="list-group-item"><strong>Ambil Daftar Grup WA:</strong> <code>GET http://[IP_VPS_ATAU_DOMAIN_ANDA]:3000/api/groups</code></li>
-                        <li class="list-group-item"><strong>Kirim Teks:</strong> <code>POST http://[IP_VPS_ATAU_DOMAIN_ANDA]:3000/api/send</code></li>
-                        <li class="list-group-item"><strong>Kirim Media:</strong> <code>POST http://[IP_VPS_ATAU_DOMAIN_ANDA]:3000/api/send-media</code></li>
+                        <li class="list-group-item"><strong>Cek Status / Minta QR:</strong> <code>GET https://ahddev.my.id/api/status</code></li>
+                        <li class="list-group-item"><strong>Ambil Daftar Grup WA:</strong> <code>GET https://ahddev.my.id/api/groups</code></li>
+                        <li class="list-group-item"><strong>Kirim Teks:</strong> <code>POST https://ahddev.my.id/api/send</code></li>
+                        <li class="list-group-item"><strong>Kirim Media:</strong> <code>POST https://ahddev.my.id/api/send-media</code></li>
+                        <li class="list-group-item text-danger"><strong>Logout WA:</strong> <code>POST https://ahddev.my.id/api/logout</code></li>
                     </ul>
 
                     <h5>Autentikasi (WAJIB)</h5>
@@ -458,6 +459,8 @@
                         loginBtn.innerHTML = 'Login';
                         loginBtn.disabled = false;
                         document.getElementById('loginPassword').value = '';
+
+                        
                     }
                 });
             }
