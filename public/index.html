@@ -14,9 +14,53 @@
         .content { padding: 30px; width: 100%; }
         .card { border: none; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .qr-box { border: 2px dashed #dee2e6; border-radius: 10px; min-height: 200px; display: flex; align-items: center; justify-content: center; }
+        
+        /* Overlay Login */
+        #loginOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f8f9fa; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
     </style>
+
+    <!-- Firebase SDK (Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, getIdToken } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+
+        // ⚠️ PENTING: REPLACE DENGAN KONFIGURASI DARI FIREBASE CONSOLE ANDA!
+        const firebaseConfig = {
+            apiKey: "AIzaSyB_4n0_-evyW2JWYgPV87iyoDxGRLW9-Xo",
+            authDomain: "whatsapp-api-ahmad.firebaseapp.com",
+            projectId: "whatsapp-api-ahmad",
+            storageBucket: "whatsapp-api-ahmad.firebasestorage.app",
+            messagingSenderId: "657835945441",
+            appId: "1:657835945441:web:21226c023255e2ebc736a0"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        // Ekspor ke window agar bisa diakses script biasa
+        window.firebaseAuth = { auth, signInWithEmailAndPassword, signOut, getIdToken, onAuthStateChanged };
+    </script>
 </head>
 <body>
+    <!-- Overlay Login -->
+    <div id="loginOverlay">
+        <div class="login-card">
+            <h3 class="text-center mb-4"><i class="fas fa-lock text-primary"></i> Admin Login</h3>
+            <div id="loginError" class="alert alert-danger d-none small"></div>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control" id="loginEmail" required>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" id="loginPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100" id="loginBtn">Login</button>
+            </form>
+        </div>
+    </div>
     <div class="d-flex">
         <!-- Sidebar -->
         <div class="sidebar flex-shrink-0" style="width: 250px;">
@@ -24,6 +68,8 @@
             <a href="#" class="nav-link active" onclick="showPage('devices', event)"><i class="fas fa-mobile-alt me-2"></i> Devices (Klien)</a>
             <a href="#" class="nav-link" onclick="showPage('history', event)"><i class="fas fa-history me-2"></i> Riwayat Pengiriman</a>
             <a href="#" class="nav-link" onclick="showPage('docs', event)"><i class="fas fa-book me-2"></i> Dokumentasi API</a>
+            <hr class="text-secondary mx-3">
+            <a href="#" class="nav-link text-danger" onclick="handleLogout()"><i class="fas fa-sign-out-alt me-2"></i> Keluar</a>
         </div>
 
         <!-- Main Content -->
@@ -182,9 +228,26 @@
         }
 
         // ================= API CALLS =================
+        // Helper untuk memanggil API dengan Token Auth
+        async function fetchWithAuth(url, options = {}) {
+            if (!window.firebaseAuth || !window.firebaseAuth.auth.currentUser) return null;
+            const token = await window.firebaseAuth.getIdToken(window.firebaseAuth.auth.currentUser);
+            options.headers = {
+                ...options.headers,
+                'Authorization': `Bearer ${token}`
+            };
+            const res = await fetch(url, options);
+            if (res.status === 401) {
+                handleLogout(); // Force logout jika token tidak valid
+                throw new Error("Unauthorized");
+            }
+            return res;
+        }
+
         async function loadDevices() {
             try {
-                const res = await fetch('/api/admin/devices');
+                const res = await fetchWithAuth('/api/admin/devices');
+                if(!res) return;
                 const data = await res.json();
                 const tbody = document.getElementById('devicesTableBody');
                 tbody.innerHTML = '';
@@ -242,7 +305,7 @@
             if(!label) return alert('Label Klien wajib diisi!');
             
             try {
-                await fetch('/api/admin/devices', {
+                await fetchWithAuth('/api/admin/devices', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ label })
@@ -258,7 +321,7 @@
         async function deleteDevice(id) {
             if(!confirm('🚨 PERINGATAN! 🚨\nYakin ingin menghapus Device ini? Akses API Key klien akan langsung terputus dan sesi WhatsApp mereka di server akan dibersihkan.')) return;
             try {
-                await fetch(`/api/admin/devices/${id}`, { method: 'DELETE' });
+                await fetchWithAuth(`/api/admin/devices/${id}`, { method: 'DELETE' });
                 loadDevices();
             } catch (e) {
                 alert('Gagal hapus device');
@@ -286,7 +349,8 @@
 
         async function loadHistory() {
             try {
-                const res = await fetch('/api/admin/history');
+                const res = await fetchWithAuth('/api/admin/history');
+                if(!res) return;
                 const data = await res.json();
                 const tbody = document.getElementById('historyTableBody');
                 tbody.innerHTML = '';
@@ -321,14 +385,88 @@
             }
         }
 
-        // Jalankan fetch awal
-        loadDevices();
+        // ================= AUTHENTICATION LOGIC =================
+        const loginOverlay = document.getElementById('loginOverlay');
+        const loginError = document.getElementById('loginError');
+        const loginBtn = document.getElementById('loginBtn');
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            if (!window.firebaseAuth) return alert('Sistem Auth belum siap (Mohon cek Firebase Config)');
+            
+            const email = document.getElementById('loginEmail').value;
+            const pass = document.getElementById('loginPassword').value;
+            
+            loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+            loginBtn.disabled = true;
+            loginError.classList.add('d-none');
+
+            try {
+                await window.firebaseAuth.signInWithEmailAndPassword(window.firebaseAuth.auth, email, pass);
+                // Simpan waktu login (batas 24 jam)
+                localStorage.setItem('loginTime', Date.now().toString());
+                
+                // Sembunyikan overlay dan muat data
+                loginOverlay.classList.add('d-none');
+                loadDevices();
+            } catch (err) {
+                loginError.innerText = 'Login Gagal: ' + err.message;
+                loginError.classList.remove('d-none');
+                loginBtn.innerHTML = 'Login';
+                loginBtn.disabled = false;
+            }
+        }
+
+        async function handleLogout() {
+            if (window.firebaseAuth) {
+                await window.firebaseAuth.signOut(window.firebaseAuth.auth);
+            }
+            localStorage.removeItem('loginTime');
+        }
+
+        function checkSessionExpiry() {
+            const loginTime = localStorage.getItem('loginTime');
+            if (loginTime) {
+                const diffHours = (Date.now() - parseInt(loginTime)) / (1000 * 60 * 60);
+                if (diffHours >= 24) {
+                    alert('Sesi login Anda sudah melebihi 24 jam. Demi keamanan, silakan login kembali.');
+                    handleLogout();
+                }
+            }
+        }
+
+        // Listener Auth State dari Firebase (Tereksekusi otomatis saat page diload)
+        let isFirstLoad = true;
+        const checkAuthReady = setInterval(() => {
+            if (window.firebaseAuth) {
+                clearInterval(checkAuthReady);
+                
+                window.firebaseAuth.onAuthStateChanged(window.firebaseAuth.auth, (user) => {
+                    checkSessionExpiry();
+                    if (user && localStorage.getItem('loginTime')) {
+                        // User Logged In & Session Valid
+                        loginOverlay.classList.add('d-none');
+                        if (isFirstLoad) {
+                            loadDevices();
+                            isFirstLoad = false;
+                        }
+                    } else {
+                        // User Logged Out or Expired
+                        loginOverlay.classList.remove('d-none');
+                        loginBtn.innerHTML = 'Login';
+                        loginBtn.disabled = false;
+                        document.getElementById('loginPassword').value = '';
+                    }
+                });
+            }
+        }, 100);
 
         // Auto refresh table devices setiap 5 detik agar status connected berubah otomatis
         setInterval(() => {
-            if (!document.getElementById('page-devices').classList.contains('d-none')) {
+            if (!document.getElementById('page-devices').classList.contains('d-none') && loginOverlay.classList.contains('d-none')) {
                 loadDevices();
             }
+            checkSessionExpiry();
         }, 5000);
     </script>
 </body>

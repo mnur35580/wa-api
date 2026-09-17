@@ -5,6 +5,7 @@ const pino = require('pino');
 const QRCode = require('qrcode');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -172,10 +173,28 @@ async function apiKeyMiddleware(req, res, next) {
     next();
 }
 
+// ================= MIDDLEWARE ADMIN AUTH (FIREBASE) =================
+async function adminAuthMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header' });
+    }
+
+    const idToken = authHeader.split('Bearer ')[1];
+    try {
+        const decodedToken = await getAuth().verifyIdToken(idToken);
+        req.user = decodedToken;
+        next();
+    } catch (error) {
+        console.error('Auth Error:', error);
+        return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    }
+}
+
 // ================= API ADMIN (DASHBOARD) =================
 
 // Ambil list semua devices
-app.get('/api/admin/devices', async (req, res) => {
+app.get('/api/admin/devices', adminAuthMiddleware, async (req, res) => {
     const snapshot = await db.collection('devices').get();
     const devices = [];
     snapshot.forEach(doc => {
@@ -193,7 +212,7 @@ app.get('/api/admin/devices', async (req, res) => {
 });
 
 // Tambah device baru
-app.post('/api/admin/devices', async (req, res) => {
+app.post('/api/admin/devices', adminAuthMiddleware, async (req, res) => {
     const { label } = req.body;
     if (!label) return res.status(400).json({ error: 'Label wajib diisi!' });
 
@@ -211,7 +230,7 @@ app.post('/api/admin/devices', async (req, res) => {
 });
 
 // Hapus device
-app.delete('/api/admin/devices/:id', async (req, res) => {
+app.delete('/api/admin/devices/:id', adminAuthMiddleware, async (req, res) => {
     const deviceId = req.params.id;
     
     // Hapus dari firestore
@@ -232,7 +251,7 @@ app.delete('/api/admin/devices/:id', async (req, res) => {
 });
 
 // Ambil History (Bisa dibatasi per device nanti)
-app.get('/api/admin/history', async (req, res) => {
+app.get('/api/admin/history', adminAuthMiddleware, async (req, res) => {
     try {
         const snapshot = await db.collection('message_history').orderBy('timestamp', 'desc').limit(50).get();
         const history = [];
